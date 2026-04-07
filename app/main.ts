@@ -6,14 +6,15 @@ console.log("Logs from your program will appear here!");
 // Uncomment the code below to pass the first stage
 const server: net.Server = net.createServer((connection: net.Socket) => {
   // Handle connection
-  connection.on("data", (data: Buffer) => {
-    connection.write("+PONG\r\n");
-    // const command = data.toString().trim();
-    // if (command === "PING") {
-    //   connection.write("+PONG\r\n", () => {
-    //     connection.end();
-    //   });
-    // }
+  connection.on("data", function (buffer: Buffer) {
+    const request = buffer.toString();
+    const parsedRequest = request.split("\r\n");
+
+    if (!parsedRequest.includes("PING")) {
+      return connection.end();
+    }
+
+    connection.write(Buffer.from("+PONG\r\n"));
   });
 });
 //
