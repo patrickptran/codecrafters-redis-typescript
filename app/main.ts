@@ -1,21 +1,25 @@
 import * as net from "net";
+import { handleCommand } from "./command";
 
-// You can use print statements as follows for debugging, they'll be visible when running tests.
-console.log("Logs from your program will appear here!");
-
-// Uncomment the code below to pass the first stage
-const server: net.Server = net.createServer((connection: net.Socket) => {
-  // Handle connection
-  connection.on("data", function (buffer: Buffer) {
+const server = net.createServer((connection: net.Socket) => {
+  // console.log("Client connected");
+  connection.on("data", (buffer: Buffer) => {
     const request = buffer.toString();
-    const parsedRequest = request.split("\r\n");
-
-    if (!parsedRequest.includes("PING")) {
-      return connection.end();
+    // console.log("📥 Received raw:", JSON.stringify(request));
+    if (request.includes("PING")) {
+      connection.write("+PONG\r\n");
+    } else if (request.includes("ECHO")) {
+      const message = request.split("\r\n")[4];
+      connection.write(`$${message.length}\r\n${message}\r\n`);
     }
-
-    connection.write(Buffer.from("+PONG\r\n"));
+  });
+  connection.on("end", () => {
+    // console.log("Client disconnected");
+  });
+  connection.on("error", (err) => {
+    console.error("Connection error:", err);
   });
 });
-//
-server.listen(6379, "127.0.0.1");
+server.listen(6379, "127.0.0.1", () => {
+  console.log("Redis server listening on 127.0.0.1:6379");
+});
