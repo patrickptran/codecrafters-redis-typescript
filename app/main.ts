@@ -6,9 +6,14 @@ import {
   encodeBulkString,
 } from "./parser";
 
+interface MapType {
+  value: string;
+  timeExpired?: number;
+}
+
+const mapping = new Map<string, MapType>();
 export const server = net.createServer((connection: net.Socket) => {
   // console.log("Client connected");
-  const mapping = new Map<any, any>();
 
   connection.on("data", (buffer: Buffer) => {
     try {
@@ -34,17 +39,21 @@ export const server = net.createServer((connection: net.Socket) => {
 
           connection.write(encodeBulkString(args[0]));
           break;
+
         case "SET":
-          if (args.length < 2) {
+          if (args.length === 2) {
+            mapping.set(args[0], { value: args[1] });
+          } else if (args.length === 4 && args[2].toUpperCase() === "PX") {
+            const date = Date.now() + parseInt(args[3]);
+            mapping.set(args[0], { value: args[1], timeExpired: date });
+          } else {
             connection.write(
               encodeError("ERR wrong number of arguments for SET command"),
             );
-            return;
+            break;
           }
-          mapping.set(args[0], args[1]);
           connection.write(encodeSimpleString("OK"));
           break;
-
         case "GET":
           if (args.length !== 1) {
             connection.write(
@@ -53,14 +62,21 @@ export const server = net.createServer((connection: net.Socket) => {
             return;
           }
 
-          const value = mapping.get(args[0]);
+          const entry = mapping.get(args[0]);
 
-          if (!value) {
+          if (!entry) {
             connection.write(encodeBulkString(null));
-          } else {
-            connection.write(encodeBulkString(value));
+            break;
           }
-          break;
+
+          if (entry.timeExpired && Date.now() > entry.timeExpired) {
+            mapping.delete(args[0]);
+            connection.write(encodeBulkString(null));
+            break;
+          }
+
+          connection.write(encodeBulkString(entry.value));
+          return;
 
         default:
           connection.write(encodeError(`ERR Unknown command: ${cmd}`));
