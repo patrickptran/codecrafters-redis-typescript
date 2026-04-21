@@ -95,7 +95,7 @@ export class RedisCommand {
   }
 
   private handleRpush(args: string[]): string {
-    if (args.length > 2) {
+    if (args.length < 2) {
       return encodeError("ERR wrong number of args for 'rpush' command");
     }
 
@@ -104,11 +104,10 @@ export class RedisCommand {
 
     let entry = this.mapping.get(key);
     const isArray = Array.isArray(entry?.value);
-
     if (entry) {
       if (isArray) {
         this.mapping.set(key, {
-          value: [...entry.value, values],
+          value: [...entry.value, ...values],
           timeExpired: entry.timeExpired,
         });
       } else {
