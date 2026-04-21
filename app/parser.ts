@@ -158,3 +158,7 @@ export const encodeSimpleString = (value: string): string => {
 export const encodeError = (message: string): string => {
   return `-${message}\r\n`;
 };
+
+export const encodeInteger = (value: number): string => {
+  return `:${value}\r\n`;
+};
