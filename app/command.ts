@@ -4,6 +4,7 @@ import {
   encodeError,
   encodeBulkString,
   encodeInteger,
+  encodeArray,
 } from "./parser";
 
 export interface MapType {
@@ -36,6 +37,9 @@ export class RedisCommand {
         break;
       case "RPUSH":
         res = this.handleRpush(args);
+        break;
+      case "LRANGE":
+        res = this.handleLRange(args);
         break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
@@ -128,5 +132,50 @@ export class RedisCommand {
       ? currentEntry.value.length
       : 0;
     return encodeInteger(len);
+  }
+
+  private handleLRange(args: string[]) {
+    if (args.length !== 3) {
+      return encodeError("ERR wrong number of arguments for 'lrange' command");
+    }
+
+    const key = args[0],
+      start = parseInt(args[1]),
+      stop = parseInt(args[2]);
+
+    if (isNaN(start) || isNaN(stop)) {
+      return encodeError("ERR value is not an integer or out of range");
+    }
+
+    const entry = this.mapping.get(key);
+    if (!entry || !Array.isArray(entry.value)) {
+      return encodeArray([]);
+    }
+
+    const list = entry.value as string[];
+    const len = list.length;
+
+    //These offsets can also be negative numbers indicating offsets starting at the end of the list.
+    // For example, -1 is the last element of the list, -2 the penultimate, and so on.
+    let newStart = start < 0 ? len + start : start;
+    let newStop = stop < 0 ? len + stop : stop;
+
+    // check valid range of index
+    newStart = Math.max(0, Math.min(newStart, len));
+
+    // Out of range indexes will not produce an error. If start is larger than the end of the list, an empty list is returned.
+    // If stop is larger than the actual end of the list, Redis will treat it like the last element of the list.
+    if (stop < 0) {
+      newStop = Math.max(-1, newStop);
+    } else {
+      newStop = Math.min(newStop, len);
+    }
+
+    if (newStart > newStop || len === 0 || start >= len) {
+      return encodeArray([]);
+    }
+
+    const res = list.slice(newStart, newStop + 1);
+    return encodeArray(res);
   }
 }
