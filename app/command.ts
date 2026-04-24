@@ -249,7 +249,7 @@ export class RedisCommand {
         return encodeError("ERR second value is not valid or out of range");
       }
       const popped = [];
-      for (let i = 1; i < needToRemove; i++) {
+      for (let i = 0; i < needToRemove; i++) {
         if (entry.value.length === 0) break;
         popped.push(entry.value.shift()!);
       }
