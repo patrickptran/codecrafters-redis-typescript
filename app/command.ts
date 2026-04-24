@@ -41,6 +41,15 @@ export class RedisCommand {
       case "LRANGE":
         res = this.handleLRange(args);
         break;
+      case "LPUSH":
+        res = this.handleLPush(args);
+        break;
+      case "LLEN":
+        res = this.handleLLen(args);
+        break;
+      case "LPOP":
+        res = this.handleLPop(args);
+        break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
@@ -177,5 +186,88 @@ export class RedisCommand {
 
     const res = list.slice(newStart, newStop + 1);
     return encodeArray(res);
+  }
+  private handleLPush(args: string[]): string {
+    if (args.length < 2) {
+      return encodeError("ERR wrong number of arguments for 'LPUSH' command");
+    }
+    const key = args[0],
+      values = args.slice(1).reverse();
+    let entry = this.mapping.get(key);
+
+    if (entry) {
+      if (Array.isArray(entry)) {
+        this.mapping.set(key, {
+          value: [...values, ...entry.value],
+          timeExpired: entry.timeExpired,
+        });
+      } else {
+        this.mapping.set(key, {
+          value: [...values, entry.value as string],
+          timeExpired: entry.timeExpired,
+        });
+      }
+    } else {
+      this.mapping.set(key, { value: values });
+    }
+    const newLen = this.mapping.get(key)?.value.length;
+    return encodeInteger(newLen);
+  }
+  private handleLLen(args: string[]): string {
+    if (args.length !== 1) {
+      return encodeError("ERR wrong number of arguments for 'LLEN' command");
+    }
+
+    const key = args[0];
+    if (
+      !this.mapping.has(key) ||
+      !Array.isArray(this.mapping.get(key)?.value)
+    ) {
+      return encodeInteger(0);
+    }
+
+    return encodeInteger(this.mapping.get(key)?.value.length);
+  }
+
+  private handleLPop(args: string[]): string {
+    if (args.length < 1) {
+      return encodeError("ERR wrong number of arguments for 'LPOP' command");
+    }
+
+    const key = args[0];
+    const entry = this.mapping.get(key);
+    if (!entry || Array.isArray(entry.value) || entry.value.length === 0) {
+      return encodeBulkString(null);
+    }
+
+    const haveToRemoveMulTime = args.length === 2;
+
+    if (haveToRemoveMulTime) {
+      const needToRemove = parseInt(args[1]);
+
+      if (isNaN(needToRemove) || needToRemove <= 0) {
+        return encodeError("ERR second value is not valid or out of range");
+      }
+      const popped = [];
+      for (let i = 1; i < needToRemove; i++) {
+        if (entry.value.length === 0) break;
+        popped.push(entry.value.shift()!);
+      }
+
+      this.mapping.set(key, {
+        value: entry.value,
+        timeExpired: entry.timeExpired,
+      });
+
+      return encodeArray(popped);
+    }
+
+    const popped = entry.value.shift();
+    this.mapping.set(key, {
+      value: entry.value,
+      timeExpired: entry.timeExpired,
+    });
+
+    return encodeBulkString(popped);
   }
 }
