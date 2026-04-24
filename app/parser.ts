@@ -163,8 +163,9 @@ export const encodeInteger = (value: number): string => {
   return `:${value}\r\n`;
 };
 
-export const encodeArray = (elements: (string | null)[]): string => {
+export const encodeArray = (elements: (string | null)[] | null): string => {
   if (!elements || elements === null) return "*-1\r\n";
+
   let res = `*${elements.length}\r\n`;
 
   for (let e of elements) {

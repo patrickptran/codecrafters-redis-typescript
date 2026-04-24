@@ -12,11 +12,20 @@ export interface MapType {
   timeExpired?: number;
 }
 
+export interface BlockedClient {
+  socket: net.Socket;
+  keys: string[];
+  timeout: number;
+  startTime: number;
+}
+
 export class RedisCommand {
   private mapping: Map<string, MapType>;
+  private blockedClients: BlockedClient[];
 
   constructor() {
     this.mapping = new Map<string, MapType>();
+    this.blockedClients = [];
   }
 
   executedCommand(cmd: string, args: string[], webSocket: net.Socket): void {
@@ -50,6 +59,9 @@ export class RedisCommand {
       case "LPOP":
         res = this.handleLPop(args);
         break;
+      case "BLPOP":
+        this.handleBLPop(args, webSocket);
+        return;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
@@ -114,15 +126,20 @@ export class RedisCommand {
 
     const key = args[0],
       values = args.slice(1);
-
     let entry = this.mapping.get(key);
+
+    let len = 0;
+
     const isArray = Array.isArray(entry?.value);
     if (entry) {
       if (isArray) {
+        const newArr = [...entry.value, ...values];
         this.mapping.set(key, {
-          value: [...entry.value, ...values],
+          value: newArr,
           timeExpired: entry.timeExpired,
         });
+
+        len = newArr.length;
       } else {
         const newArr = [entry.value as string, ...values];
 
@@ -130,16 +147,14 @@ export class RedisCommand {
           value: newArr,
           timeExpired: entry.timeExpired,
         });
+        len = newArr.length;
       }
     } else {
       this.mapping.set(key, { value: values });
+      len = values.length;
     }
 
-    const currentEntry = this.mapping.get(key)!;
-
-    const len = Array.isArray(currentEntry.value)
-      ? currentEntry.value.length
-      : 0;
+    this.checkBlockClients(key);
     return encodeInteger(len);
   }
 
@@ -194,24 +209,31 @@ export class RedisCommand {
     const key = args[0],
       values = args.slice(1).reverse();
     let entry = this.mapping.get(key);
+    let len = 0;
 
     if (entry) {
       if (Array.isArray(entry.value)) {
+        const newArr = [...values, ...entry.value];
         this.mapping.set(key, {
-          value: [...values, ...entry.value],
+          value: newArr,
           timeExpired: entry.timeExpired,
         });
+        len = newArr.length;
       } else {
+        const newArr = [...values, entry.value as string];
         this.mapping.set(key, {
-          value: [...values, entry.value as string],
+          value: newArr,
           timeExpired: entry.timeExpired,
         });
+        len = newArr.length;
       }
     } else {
       this.mapping.set(key, { value: values });
+      len = values.length;
     }
-    const newLen = this.mapping.get(key)?.value.length;
-    return encodeInteger(newLen);
+
+    this.checkBlockClients(key);
+    return encodeInteger(len);
   }
   private handleLLen(args: string[]): string {
     if (args.length !== 1) {
@@ -269,5 +291,92 @@ export class RedisCommand {
     });
 
     return encodeBulkString(popped);
+  }
+
+  private handleBLPop(args: string[], socket: net.Socket): void {
+    if (args.length < 2) {
+      socket.write(
+        encodeError("ERR wrong number of arguments for 'BLPOP' command"),
+      );
+      return;
+    }
+
+    // syntax BLPOP key [keys ... ] timeout
+    const keys = args.slice(0, -1),
+      timeout = parseFloat(args[args.length - 1]);
+
+    if (isNaN(timeout) || timeout < 0) {
+      socket.write(encodeError("ERR invalid timeout for 'BLPOP' command"));
+      return;
+    }
+
+    // check if any key has an element available
+    for (const key of keys) {
+      const entry = this.mapping.get(key);
+      if (entry && Array.isArray(entry.value) && entry.value.length > 0) {
+        const popped = entry.value.shift()!;
+
+        this.mapping.set(key, {
+          value: entry.value,
+          timeExpired: entry.timeExpired,
+        });
+
+        const res = encodeArray([key, popped]);
+        socket.write(res);
+        return;
+      }
+    }
+
+    // if no elements available, we need to block
+    const needToBlock: BlockedClient = {
+      socket,
+      keys,
+      timeout,
+      startTime: Date.now(),
+    };
+
+    this.blockedClients.push(needToBlock);
+
+    if (timeout > 0) {
+      setTimeout(() => {
+        // check if client is still in blocked list
+        const index = this.blockedClients.indexOf(needToBlock);
+
+        if (index !== -1) {
+          this.blockedClients.splice(index, 1);
+          socket.write(encodeArray(null));
+        }
+      }, timeout * 1000);
+    }
+  }
+
+  private checkBlockClients(key: string): void {
+    // first we need to find the blocked client who is waiting for this current key
+    for (let i = 0; i < this.blockedClients.length; i++) {
+      const blockedClient = this.blockedClients[i];
+
+      if (blockedClient.keys.includes(key)) {
+        // we found that client, then remove him from blocked list
+        this.blockedClients.splice(i, 1);
+
+        // get the first element from the list
+        const entry = this.mapping.get(key);
+
+        if (entry && Array.isArray(entry.value) && entry.value.length > 0) {
+          const popped = entry.value.shift()!;
+
+          this.mapping.set(key, {
+            value: entry.value,
+            timeExpired: entry.timeExpired,
+          });
+
+          const res = encodeArray([key, popped]);
+
+          blockedClient.socket.write(res);
+        }
+
+        break;
+      }
+    }
   }
 }
