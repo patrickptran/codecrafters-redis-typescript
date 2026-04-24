@@ -196,7 +196,7 @@ export class RedisCommand {
     let entry = this.mapping.get(key);
 
     if (entry) {
-      if (Array.isArray(entry)) {
+      if (Array.isArray(entry.value)) {
         this.mapping.set(key, {
           value: [...values, ...entry.value],
           timeExpired: entry.timeExpired,
@@ -236,7 +236,7 @@ export class RedisCommand {
 
     const key = args[0];
     const entry = this.mapping.get(key);
-    if (!entry || Array.isArray(entry.value) || entry.value.length === 0) {
+    if (!entry || !Array.isArray(entry.value) || entry.value.length === 0) {
       return encodeBulkString(null);
     }
 
