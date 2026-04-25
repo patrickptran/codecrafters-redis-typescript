@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import * as net from "net";
-import { parsedCommand } from "./parser";
+import { parsedCommand } from "./utils/parser";
 import { server } from "./main";
 
 const buildRESP = (payload: string) => Buffer.from(payload, "utf8");

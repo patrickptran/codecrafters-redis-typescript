@@ -1,5 +1,5 @@
 import * as net from "net";
-import { parsedCommand, encodeError } from "./parser";
+import { parsedCommand, encodeError } from "./utils/parser";
 import { RedisCommand } from "./command";
 
 const redisCmd = new RedisCommand();
