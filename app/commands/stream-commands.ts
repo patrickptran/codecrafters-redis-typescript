@@ -15,22 +15,24 @@ export class StreamCommands {
     const [currentMsTime, currentSequence] = currentId.split("-").map(Number);
 
     let error = null;
-
-    if (isNaN(currentMsTime) || isNaN(currentSequence)) {
+    if (currentMsTime === 0 && currentSequence === 0) {
       error = encodeError(
-        "ERR in XADD, invalid integer of 'millisecondsTime' or 'sequenceNumber'",
+        "ERR The ID specified in XADD must be greater than 0-0",
       );
-    } else if (currentMsTime === lastMsTime && lastSequence > currentSequence) {
+    } else if (isNaN(currentMsTime) || isNaN(currentSequence)) {
       error = encodeError(
-        "ERR in XADD, the millisecondsTime values are equal, so the sequenceNumber of the new ID must be greater than the last entry's sequenceNumber.",
+        "ERR The ID specified in XADD is equal or smaller than the target stream top item",
+      );
+    } else if (
+      currentMsTime === lastMsTime &&
+      lastSequence >= currentSequence
+    ) {
+      error = encodeError(
+        "ERR The ID specified in XADD is equal or smaller than the target stream top item",
       );
     } else if (currentMsTime < lastMsTime) {
       error = encodeError(
-        "ERR In XADD, The millisecondsTime portion of the new ID must be greater than or equal to the last entry's millisecondsTime",
-      );
-    } else if (currentMsTime === 0 && currentSequence === 0) {
-      error = encodeError(
-        "ERR The ID in XADD must be greater than 0-0. The minimum valid ID Redis accepts is 0-1",
+        "ERR The ID specified in XADD is equal or smaller than the target stream top item",
       );
     }
     return error;
