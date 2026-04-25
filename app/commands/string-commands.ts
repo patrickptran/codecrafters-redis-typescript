@@ -3,12 +3,12 @@ import {
   encodeError,
   encodeSimpleString,
 } from "../utils/parser";
-import type { EntryType } from "../command";
+import type { MapEntry } from "../command";
 
 export class StringCommands {
-  private mapping: Map<String, EntryType>;
+  private mapping: Map<String, MapEntry>;
 
-  constructor(mapping: Map<String, EntryType>) {
+  constructor(mapping: Map<String, MapEntry>) {
     this.mapping = mapping;
   }
 

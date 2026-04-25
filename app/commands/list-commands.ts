@@ -6,7 +6,7 @@ import {
   encodeInteger,
   encodeSimpleString,
 } from "../utils/parser";
-import type { EntryType } from "../command";
+import type { MapEntry } from "../command";
 
 export interface BlockedClient {
   socket: net.Socket;
@@ -16,9 +16,9 @@ export interface BlockedClient {
 }
 
 export class ListCommands {
-  private mapping: Map<String, EntryType>;
+  private mapping: Map<String, MapEntry>;
   private blockedClients: BlockedClient[];
-  constructor(mapping: Map<String, EntryType>) {
+  constructor(mapping: Map<String, MapEntry>) {
     this.mapping = mapping;
     this.blockedClients = [];
   }

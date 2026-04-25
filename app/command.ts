@@ -8,31 +8,31 @@ import {
 } from "./utils/parser";
 
 import { StringCommands } from "./commands/string-commands";
-import { ListCommands } from "./commands/list-commands";
+import { ListCommands, type BlockedClient } from "./commands/list-commands";
+import { StreamCommands } from "./commands/stream-commands";
 
-export interface EntryType {
+export interface MapEntry {
   value: any;
   timeExpired?: number;
+  type?: "string" | "list" | "stream";
 }
 
-export interface BlockedClient {
-  socket: net.Socket;
-  keys: string[];
-  timeout: number;
-  startTime: number;
+export interface StreamEntry {
+  id: string;
+  fields: Map<string, string>;
 }
 
 export class RedisCommand {
-  private mapping: Map<string, EntryType>;
-  private blockedClients: BlockedClient[];
+  private mapping: Map<string, MapEntry>;
   private stringCommands: StringCommands;
   private listCommands: ListCommands;
+  private streamCommands: StreamCommands;
 
   constructor() {
-    this.mapping = new Map<string, EntryType>();
-    this.blockedClients = [];
+    this.mapping = new Map<string, MapEntry>();
     this.stringCommands = new StringCommands(this.mapping);
     this.listCommands = new ListCommands(this.mapping);
+    this.streamCommands = new StreamCommands(this.mapping);
   }
 
   executedCommand(cmd: string, args: string[], webSocket: net.Socket): void {
@@ -72,6 +72,10 @@ export class RedisCommand {
       case "TYPE":
         res = this.handleType(args);
         break;
+
+      case "XADD":
+        res = this.streamCommands.handleXAdd(args);
+        break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
@@ -79,7 +83,7 @@ export class RedisCommand {
     webSocket.write(res);
   }
 
-  private handlePing(args: string[]): string {
+  private handlePing(): string {
     return encodeSimpleString("PONG");
   }
   private handleEcho(args: string[]): string {
@@ -97,6 +101,10 @@ export class RedisCommand {
     const entry = this.mapping.get(args[0]);
     if (!entry) {
       return encodeSimpleString("none");
+    }
+
+    if (entry.type === "stream") {
+      return encodeSimpleString("stream");
     }
 
     if (Array.isArray(entry.value)) {
