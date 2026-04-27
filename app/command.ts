@@ -40,7 +40,7 @@ export class RedisCommand {
 
     switch (cmd.toUpperCase()) {
       case "PING":
-        res = this.handlePing(args);
+        res = this.handlePing();
         break;
       case "ECHO":
         res = this.handleEcho(args);
@@ -78,6 +78,9 @@ export class RedisCommand {
         break;
       case "XRANGE":
         res = this.streamCommands.handleXRange(args);
+        break;
+      case "XREAD":
+        res = this.streamCommands.handleXRead(args);
         break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);

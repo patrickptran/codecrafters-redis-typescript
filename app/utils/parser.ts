@@ -204,3 +204,29 @@ export const encodeNestedArray = (items: (string | string[])[][]): string => {
   }
   return res;
 };
+
+export const encodeXReadArray = (
+  streams: [string, [string, string[]][]][],
+): string => {
+  let res = `*${streams.length}\r\n`;
+
+  for (let [key, entries] of streams) {
+    res += "*2\r\n";
+
+    res += encodeBulkString(key);
+    res += `*${entries.length}\r\n`;
+
+    for (let [entryId, fields] of entries) {
+      res += "*2\r\n";
+
+      res += encodeBulkString(entryId);
+      res += `*${fields.length}\r\n`;
+
+      for (let field of fields) {
+        res += encodeBulkString(field);
+      }
+    }
+  }
+
+  return res;
+};

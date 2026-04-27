@@ -4,6 +4,7 @@ import {
   encodeError,
   encodeBulkString,
   encodeRawArray,
+  encodeXReadArray,
   encodeNestedArray,
 } from "../utils/parser";
 
@@ -180,5 +181,54 @@ export class StreamCommands {
       res.push([streamEntry.id, fieldArray]);
     }
     return encodeNestedArray(res);
+  }
+
+  // XREAD STREAMS <key> <key1> ...  <id> <id1>
+  public handleXRead(args: string[]): string {
+    if (args.length < 3 || args.length % 2 === 0) {
+      return encodeError("ERR wrong number of arguments for 'XREAD' command");
+    }
+
+    if (args[0].toUpperCase() !== "STREAMS") {
+      return encodeError("ERR syntax error");
+    }
+
+    const numberOfStreams = (args.length - 1) / 2;
+
+    const streamKeys = args.slice(1, 1 + numberOfStreams);
+    const streamIds = args.slice(1 + numberOfStreams);
+
+    const totalResult: [string, [string, string[]][]][] = [];
+
+    for (let i = 0; i < numberOfStreams; i++) {
+      const key = streamKeys[i],
+        id = streamIds[i];
+
+      const entry = this.mapping.get(key)!;
+      if (!entry || entry.type !== "stream") {
+        continue;
+      }
+      const [startMs, startSeq] = this.parseId(id, false);
+
+      const res: [string, string[]][] = [];
+
+      for (let streamEntry of entry.value) {
+        const [entryMs, entrySeq] = streamEntry.id.split("-").map(Number);
+
+        if (entryMs < startMs || (entryMs === startMs && entrySeq < startSeq))
+          continue;
+
+        const fieldArray: string[] = [];
+
+        for (let [field, value] of streamEntry.fields) {
+          fieldArray.push(field, value);
+        }
+        res.push([streamEntry.id, fieldArray]);
+      }
+      if (res.length > 0) {
+        totalResult.push([key, res]);
+      }
+    }
+    return encodeXReadArray(totalResult);
   }
 }
