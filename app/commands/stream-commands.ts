@@ -19,10 +19,6 @@ export class StreamCommands {
       error = encodeError(
         "ERR The ID specified in XADD must be greater than 0-0",
       );
-    } else if (isNaN(currentMsTime) || isNaN(currentSequence)) {
-      error = encodeError(
-        "ERR The ID specified in XADD is equal or smaller than the target stream top item",
-      );
     } else if (
       currentMsTime === lastMsTime &&
       lastSequence >= currentSequence
@@ -30,12 +26,33 @@ export class StreamCommands {
       error = encodeError(
         "ERR The ID specified in XADD is equal or smaller than the target stream top item",
       );
-    } else if (currentMsTime < lastMsTime) {
+    } else if (
+      currentMsTime < lastMsTime ||
+      isNaN(currentMsTime) ||
+      isNaN(currentSequence)
+    ) {
       error = encodeError(
         "ERR The ID specified in XADD is equal or smaller than the target stream top item",
       );
     }
     return error;
+  }
+
+  private generateSequenceNumber(entry: MapEntry, msTime: number): number {
+    if (entry.value.length === 0) {
+      return msTime === 0 ? 1 : 0;
+    }
+
+    let maxSequence = -1;
+    for (let streamEntry of entry.value) {
+      const [entryTime, entrySeq] = streamEntry.id.split("-").map(Number);
+
+      if (entryTime === msTime && entrySeq > maxSequence) {
+        maxSequence = entrySeq;
+      }
+    }
+
+    return maxSequence === -1 ? (msTime === 0 ? 1 : 0) : maxSequence + 1;
   }
 
   public handleXAdd(args: string[]): string {
@@ -44,15 +61,51 @@ export class StreamCommands {
     }
 
     const [key, id, ...values] = args;
-    const entry = this.mapping.get(key);
 
-    if (!entry) {
+    if (!this.mapping.has(key)) {
       this.mapping.set(key, { value: [], type: "stream" });
     }
+    const entry = this.mapping.get(key)!;
 
-    if (entry && entry.value.length > 0) {
-      const error = this.isValidID(entry, id);
-      if (error) return error;
+    const [time, sequence] = id.split("-");
+    const isAutoSequence = time !== "*" && sequence === "*";
+    const isFullAuto = time === "*";
+    let finalId = id;
+
+    if (isFullAuto) {
+      const timeMs = Date.now();
+      const sequenceNumber = this.generateSequenceNumber(entry, timeMs);
+      finalId = `${timeMs}-${sequenceNumber}`;
+    } else if (isAutoSequence) {
+      const timeMs = parseInt(time);
+      if (isNaN(timeMs)) {
+        return encodeError("ERR Invalid streamId specified as argument");
+      }
+
+      if (entry.value.length > 0) {
+        const lastEntry = entry.value[entry.value.length - 1];
+        const [lastMs] = lastEntry.id.split("-").map(Number);
+
+        if (timeMs < lastMs) {
+          return encodeError(
+            "ERR The ID specified in XADD is equal or smaller than the target stream top item",
+          );
+        }
+
+        if (timeMs === 0) {
+          return encodeError(
+            "ERR The ID specified in XADD must be greater than 0-0",
+          );
+        }
+      }
+
+      const sequenceNumber = this.generateSequenceNumber(entry, timeMs);
+      finalId = `${timeMs}-${sequenceNumber}`;
+    } else {
+      if (entry.value.length > 0) {
+        const error = this.isValidID(entry, id);
+        if (error) return error;
+      }
     }
 
     const fieldMap = new Map<string, string>();
@@ -61,12 +114,12 @@ export class StreamCommands {
     }
 
     const streamEntry: StreamEntry = {
-      id: id,
+      id: finalId,
       fields: fieldMap,
     };
+    const currentEntry = this.mapping.get(key)!;
+    currentEntry.value.push(streamEntry);
 
-    entry?.value.push(streamEntry);
-
-    return encodeBulkString(id);
+    return encodeBulkString(finalId);
   }
 }
