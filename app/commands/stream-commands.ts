@@ -1,11 +1,18 @@
 import type { MapEntry, StreamEntry } from "../command";
-import { encodeArray, encodeError, encodeBulkString } from "../utils/parser";
+import {
+  encodeArray,
+  encodeError,
+  encodeBulkString,
+  encodeRawArray,
+  encodeNestedArray,
+} from "../utils/parser";
 
 export class StreamCommands {
   private mapping: Map<string, MapEntry>;
   constructor(mapping: Map<string, MapEntry>) {
     this.mapping = mapping;
   }
+  // ID format : <timeMS> - <sequence>
 
   private isValidID(entry: MapEntry, currentId: string): string | null {
     const lastEntry = entry.value[entry.value.length - 1];
@@ -53,6 +60,23 @@ export class StreamCommands {
     }
 
     return maxSequence === -1 ? (msTime === 0 ? 1 : 0) : maxSequence + 1;
+  }
+
+  private parseId(id: string, isEnd: boolean): [number, number] {
+    if (id === "-") {
+      return [-Infinity, -Infinity];
+    }
+
+    if (id === "+") {
+      return [Infinity, Infinity];
+    }
+
+    const idArray = id.split("-");
+    if (idArray.length === 1) {
+      return [parseInt(idArray[0]), isEnd ? Infinity : 0];
+    }
+
+    return [parseInt(idArray[0]), parseInt(idArray[1])];
   }
 
   public handleXAdd(args: string[]): string {
@@ -108,6 +132,7 @@ export class StreamCommands {
       }
     }
 
+    // add field Map
     const fieldMap = new Map<string, string>();
     for (let i = 0; i < values.length; i += 2) {
       fieldMap.set(values[i], values[i + 1]);
@@ -121,5 +146,39 @@ export class StreamCommands {
     currentEntry.value.push(streamEntry);
 
     return encodeBulkString(finalId);
+  }
+
+  public handleXRange(args: string[]): string {
+    if (args.length !== 3) {
+      return encodeError("ERR wrong number of arguments for 'XRANGE' command");
+    }
+
+    const [key, startId, endId] = args;
+
+    const entry = this.mapping.get(key);
+    if (!entry || entry.type !== "stream") {
+      return "*0\r\n";
+    }
+
+    const [startMs, startSeq] = this.parseId(startId, false);
+    const [endMs, endSeq] = this.parseId(endId, true);
+    const res = [];
+
+    for (let streamEntry of entry.value) {
+      const [entryMs, entrySeq] = streamEntry.id.split("-").map(Number);
+
+      if (entryMs < startMs || (entryMs === startMs && entrySeq < startSeq))
+        continue;
+
+      if (endMs > entryMs || (endMs === entryMs && entrySeq > endSeq)) break;
+
+      const fieldArray: string[] = [];
+      for (const [key, value] of streamEntry.fields.entries()) {
+        fieldArray.push(key, value);
+      }
+
+      res.push([streamEntry.id, fieldArray]);
+    }
+    return encodeNestedArray(res);
   }
 }

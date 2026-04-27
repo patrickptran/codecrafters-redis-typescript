@@ -173,3 +173,34 @@ export const encodeArray = (elements: (string | null)[] | null): string => {
   }
   return res;
 };
+
+export const encodeRawArray = (elements: (string | null)[] | null): string => {
+  if (!elements || elements === null) return "*-1\r\n";
+
+  let res = `*${elements.length}\r\n`;
+
+  for (let e of elements) {
+    res += e;
+  }
+  return res;
+};
+
+export const encodeNestedArray = (items: (string | string[])[][]): string => {
+  let res = `*${items.length}\r\n`;
+  for (const item of items) {
+    res += `*${item.length}\r\n`;
+
+    for (const element of item) {
+      if (Array.isArray(element)) {
+        res += `*${element.length}\r\n`;
+
+        for (let subElement of element) {
+          res += encodeBulkString(subElement);
+        }
+      } else {
+        res += encodeBulkString(element);
+      }
+    }
+  }
+  return res;
+};

@@ -76,6 +76,9 @@ export class RedisCommand {
       case "XADD":
         res = this.streamCommands.handleXAdd(args);
         break;
+      case "XRANGE":
+        res = this.streamCommands.handleXRange(args);
+        break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
