@@ -184,23 +184,68 @@ export class StreamCommands {
   }
 
   // XREAD STREAMS <key> <key1> ...  <id> <id1>
-  public handleXRead(args: string[]): string {
-    if (args.length < 3 || args.length % 2 === 0) {
+  public async handleXRead(args: string[]): Promise<string> {
+    let blockTimeout: number | null = null;
+    let offset = 0;
+
+    if (args[0].toUpperCase() === "BLOCK") {
+      if (args.length < 2) {
+        return encodeError("ERR wrong number of arguments for 'XREAD' command");
+      }
+
+      blockTimeout = parseInt(args[1]);
+      if (isNaN(blockTimeout)) {
+        return encodeError("ERR value is not an integer or out of range");
+      }
+      offset = 2;
+    }
+
+    const streamsArgs = args.slice(offset);
+    if (streamsArgs.length < 3 || streamsArgs.length % 2 === 0) {
       return encodeError("ERR wrong number of arguments for 'XREAD' command");
     }
 
-    if (args[0].toUpperCase() !== "STREAMS") {
+    if (streamsArgs[0].toUpperCase() !== "STREAMS") {
       return encodeError("ERR syntax error");
     }
 
-    const numberOfStreams = (args.length - 1) / 2;
+    const numberOfStreams = (streamsArgs.length - 1) / 2;
 
-    const streamKeys = args.slice(1, 1 + numberOfStreams);
-    const streamIds = args.slice(1 + numberOfStreams);
+    const streamKeys = streamsArgs.slice(1, 1 + numberOfStreams);
+    const streamIds = streamsArgs.slice(1 + numberOfStreams);
 
+    if (blockTimeout !== null) {
+      return this.handleBlockXRead(streamKeys, streamIds, blockTimeout);
+    }
+
+    return this.processXRead(streamKeys, streamIds);
+  }
+
+  private async handleBlockXRead(
+    streamKeys: string[],
+    streamIds: string[],
+    blockTimeout: number,
+  ): Promise<string> {
+    const startTime = Date.now();
+
+    while (true) {
+      const res = this.processXRead(streamKeys, streamIds);
+
+      if (res !== "*0\r\n") return res;
+
+      const elapsed = Date.now() - startTime;
+      if (blockTimeout > 0 && elapsed >= blockTimeout) {
+        return "*-1\r\n";
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  private processXRead(streamKeys: string[], streamIds: string[]): string {
     const totalResult: [string, [string, string[]][]][] = [];
 
-    for (let i = 0; i < numberOfStreams; i++) {
+    for (let i = 0; i < streamKeys.length; i++) {
       const key = streamKeys[i],
         id = streamIds[i];
 
@@ -215,7 +260,7 @@ export class StreamCommands {
       for (let streamEntry of entry.value) {
         const [entryMs, entrySeq] = streamEntry.id.split("-").map(Number);
 
-        if (entryMs < startMs || (entryMs === startMs && entrySeq < startSeq))
+        if (entryMs < startMs || (entryMs === startMs && entrySeq <= startSeq))
           continue;
 
         const fieldArray: string[] = [];
@@ -228,6 +273,10 @@ export class StreamCommands {
       if (res.length > 0) {
         totalResult.push([key, res]);
       }
+    }
+
+    if (totalResult.length === 0) {
+      return "*0\r\n";
     }
     return encodeXReadArray(totalResult);
   }

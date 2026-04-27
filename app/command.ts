@@ -35,7 +35,11 @@ export class RedisCommand {
     this.streamCommands = new StreamCommands(this.mapping);
   }
 
-  executedCommand(cmd: string, args: string[], webSocket: net.Socket): void {
+  async executedCommand(
+    cmd: string,
+    args: string[],
+    webSocket: net.Socket,
+  ): Promise<void> {
     let res: string;
 
     switch (cmd.toUpperCase()) {
@@ -80,7 +84,7 @@ export class RedisCommand {
         res = this.streamCommands.handleXRange(args);
         break;
       case "XREAD":
-        res = this.streamCommands.handleXRead(args);
+        res = await this.streamCommands.handleXRead(args);
         break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
