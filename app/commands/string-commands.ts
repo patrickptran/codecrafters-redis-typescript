@@ -2,6 +2,7 @@ import {
   encodeBulkString,
   encodeError,
   encodeSimpleString,
+  encodeInteger,
 } from "../utils/parser";
 import type { MapEntry } from "../command";
 
@@ -50,5 +51,31 @@ export class StringCommands {
     }
 
     return encodeBulkString(entry.value);
+  }
+
+  public handleIncr(args: string[]): string {
+    if (args.length !== 1) {
+      return encodeError("ERR wrong number of arguments for INCR command");
+    }
+
+    const entry = this.mapping.get(args[0]);
+    if (!entry) {
+      this.mapping.set(args[0], { value: 1 });
+      return encodeInteger(1);
+    }
+
+    if (entry.timeExpired && Date.now() > entry.timeExpired) {
+      this.mapping.delete(args[0]);
+      this.mapping.set(args[0], { value: 1 });
+      return encodeInteger(1);
+    }
+
+    const currentValue = parseInt(entry.value);
+    if (isNaN(currentValue)) {
+      return encodeError("ERR value is not an integer or out of range");
+    }
+
+    this.mapping.set(args[0], { value: (currentValue + 1).toString() });
+    return encodeInteger(currentValue + 1);
   }
 }
