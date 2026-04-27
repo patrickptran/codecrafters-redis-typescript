@@ -170,7 +170,7 @@ export class StreamCommands {
       if (entryMs < startMs || (entryMs === startMs && entrySeq < startSeq))
         continue;
 
-      if (endMs > entryMs || (endMs === entryMs && entrySeq > endSeq)) break;
+      if (entryMs > endMs || (endMs === entryMs && entrySeq > endSeq)) break;
 
       const fieldArray: string[] = [];
       for (const [key, value] of streamEntry.fields.entries()) {
