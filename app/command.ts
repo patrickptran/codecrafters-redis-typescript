@@ -8,8 +8,9 @@ import {
 } from "./utils/parser";
 
 import { StringCommands } from "./commands/string-commands";
-import { ListCommands, type BlockedClient } from "./commands/list-commands";
+import { ListCommands } from "./commands/list-commands";
 import { StreamCommands } from "./commands/stream-commands";
+import { TransactionsCommands } from "./commands/transaction-commands";
 
 export interface MapEntry {
   value: any;
@@ -27,12 +28,14 @@ export class RedisCommand {
   private stringCommands: StringCommands;
   private listCommands: ListCommands;
   private streamCommands: StreamCommands;
+  private transactionCommands: TransactionsCommands;
 
   constructor() {
     this.mapping = new Map<string, MapEntry>();
     this.stringCommands = new StringCommands(this.mapping);
     this.listCommands = new ListCommands(this.mapping);
     this.streamCommands = new StreamCommands(this.mapping);
+    this.transactionCommands = new TransactionsCommands(this.mapping);
   }
 
   async executedCommand(
@@ -88,6 +91,10 @@ export class RedisCommand {
         break;
       case "XREAD":
         res = await this.streamCommands.handleXRead(args);
+        break;
+
+      case "MULTI":
+        res = this.transactionCommands.handleMuli(args);
         break;
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
