@@ -214,11 +214,26 @@ export class StreamCommands {
     const streamKeys = streamsArgs.slice(1, 1 + numberOfStreams);
     const streamIds = streamsArgs.slice(1 + numberOfStreams);
 
+    const newStreamIds = streamIds.map((id, index) => {
+      if (id === "$") {
+        const key = streamKeys[index];
+        const entry = this.mapping.get(key);
+
+        if (entry && entry.type === "stream" && entry.value.length > 0) {
+          const lastEntry = entry.value[entry.value.length - 1];
+          return lastEntry.id;
+        } else {
+          return "0-0";
+        }
+      }
+      return id;
+    });
+
     if (blockTimeout !== null) {
-      return this.handleBlockXRead(streamKeys, streamIds, blockTimeout);
+      return this.handleBlockXRead(streamKeys, newStreamIds, blockTimeout);
     }
 
-    return this.processXRead(streamKeys, streamIds);
+    return this.processXRead(streamKeys, newStreamIds);
   }
 
   private async handleBlockXRead(
