@@ -4,7 +4,7 @@ import {
   encodeSimpleString,
   encodeInteger,
 } from "../utils/parser";
-import type { MapEntry } from "../command";
+import type { MapEntry } from "../types";
 
 export class StringCommands {
   private mapping: Map<String, MapEntry>;
@@ -60,13 +60,13 @@ export class StringCommands {
 
     const entry = this.mapping.get(args[0]);
     if (!entry) {
-      this.mapping.set(args[0], { value: 1 });
+      this.mapping.set(args[0], { value: "1" });
       return encodeInteger(1);
     }
 
     if (entry.timeExpired && Date.now() > entry.timeExpired) {
       this.mapping.delete(args[0]);
-      this.mapping.set(args[0], { value: 1 });
+      this.mapping.set(args[0], { value: "1" });
       return encodeInteger(1);
     }
 

@@ -100,7 +100,15 @@ export class RedisCommand {
         res = this.transactionCommands.handleMulti(args, webSocket);
         break;
       case "EXEC":
-        res = this.transactionCommands.handleExec(args, webSocket);
+        res = this.transactionCommands.handleExec(
+          args,
+          webSocket,
+          (command: string, cmdArgs: string[]) =>
+            this.executeCommand(command, cmdArgs),
+        );
+        break;
+      case "DISCARD":
+        res = this.handleDiscard(args, webSocket);
         break;
 
       default:
@@ -138,6 +146,74 @@ export class RedisCommand {
       return encodeSimpleString("list");
     }
     return encodeSimpleString("string");
+  }
+
+  private handleDiscard(args: string[], webSocket: net.Socket): string {
+    if (args.length !== 0) {
+      return encodeError("ERR wrong number of arguments for 'DISCARD' command");
+    }
+
+    const connectionId = this.transactionCommands.getConnectionId(webSocket);
+
+    const isInTransaction =
+      this.transactionCommands.isInTransaction(connectionId) || false;
+
+    if (!isInTransaction) {
+      return encodeError("ERR DISCARD without MULTI");
+    }
+
+    this.transactionCommands.clearQueue(connectionId);
+    return encodeSimpleString("OK");
+  }
+
+  private executeCommand(cmd: string, args: string[]): string {
+    let res: string;
+
+    switch (cmd.toUpperCase()) {
+      case "PING":
+        res = this.handlePing();
+        break;
+      case "ECHO":
+        res = this.handleEcho(args);
+        break;
+      case "TYPE":
+        res = this.handleType(args);
+        break;
+      case "SET":
+        res = this.stringCommands.handleSet(args);
+        break;
+      case "GET":
+        res = this.stringCommands.handleGet(args);
+        break;
+      case "INCR":
+        res = this.stringCommands.handleIncr(args);
+        break;
+      case "RPUSH":
+        res = this.listCommands.handleRpush(args);
+        break;
+      case "LRANGE":
+        res = this.listCommands.handleLRange(args);
+        break;
+      case "LPUSH":
+        res = this.listCommands.handleLPush(args);
+        break;
+      case "LLEN":
+        res = this.listCommands.handleLLen(args);
+        break;
+      case "LPOP":
+        res = this.listCommands.handleLPop(args);
+        break;
+      case "XADD":
+        res = this.streamCommands.handleXAdd(args);
+        break;
+      case "XRANGE":
+        res = this.streamCommands.handleXRange(args);
+        break;
+      default:
+        res = encodeError(`ERR unknow command ${cmd}`);
+    }
+
+    return res;
   }
 
   private shouldQueue(command: string, webSocket: net.Socket): boolean {
