@@ -94,8 +94,12 @@ export class RedisCommand {
         break;
 
       case "MULTI":
-        res = this.transactionCommands.handleMuli(args);
+        res = this.transactionCommands.handleMulti(args);
         break;
+      case "EXEC":
+        res = this.transactionCommands.handleExec(args);
+        break;
+
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
