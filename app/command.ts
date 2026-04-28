@@ -155,8 +155,7 @@ export class RedisCommand {
 
     const connectionId = this.transactionCommands.getConnectionId(webSocket);
 
-    const isInTransaction =
-      this.transactionCommands.isInTransaction(connectionId) || false;
+    const isInTransaction = this.transactionCommands.isInTransaction(webSocket);
 
     if (!isInTransaction) {
       return encodeError("ERR DISCARD without MULTI");
