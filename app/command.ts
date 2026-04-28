@@ -113,7 +113,7 @@ export class RedisCommand {
 
       // Optimistic Locking
       case "WATCH":
-        res = this.handleWatch(args);
+        res = this.handleWatch(args, webSocket);
         break;
 
       default:
@@ -170,9 +170,13 @@ export class RedisCommand {
     return encodeSimpleString("OK");
   }
 
-  private handleWatch(args: string[]): string {
+  private handleWatch(args: string[], webSocket: net.Socket): string {
     if (args.length === 0) {
       return encodeError("ERR wrong number of arguments for 'WATCH' command");
+    }
+    const isInTransaction = this.transactionCommands.isInTransaction(webSocket);
+    if (isInTransaction) {
+      return encodeError("ERR WATCH inside MULTI is not allowed");
     }
 
     // For this stage, just accept the command and respond with OK
