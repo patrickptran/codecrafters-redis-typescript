@@ -11,17 +11,7 @@ import { StringCommands } from "./commands/string-commands";
 import { ListCommands } from "./commands/list-commands";
 import { StreamCommands } from "./commands/stream-commands";
 import { TransactionsCommands } from "./commands/transaction-commands";
-
-export interface MapEntry {
-  value: any;
-  timeExpired?: number;
-  type?: "string" | "list" | "stream";
-}
-
-export interface StreamEntry {
-  id: string;
-  fields: Map<string, string>;
-}
+import type { MapEntry } from "./types";
 
 export class RedisCommand {
   private mapping: Map<string, MapEntry>;
@@ -45,13 +35,25 @@ export class RedisCommand {
   ): Promise<void> {
     let res: string;
 
+    if (this.shouldQueue(cmd, webSocket)) {
+      res = this.transactionCommands.enqueueCommand(cmd, args, webSocket);
+      webSocket.write(res);
+      return;
+    }
+
     switch (cmd.toUpperCase()) {
+      // the common command
       case "PING":
         res = this.handlePing();
         break;
       case "ECHO":
         res = this.handleEcho(args);
         break;
+      case "TYPE":
+        res = this.handleType(args);
+        break;
+
+      // the string commands
       case "SET":
         res = this.stringCommands.handleSet(args);
         break;
@@ -61,6 +63,8 @@ export class RedisCommand {
       case "INCR":
         res = this.stringCommands.handleIncr(args);
         break;
+
+      // the list commands
       case "RPUSH":
         res = this.listCommands.handleRpush(args);
         break;
@@ -79,10 +83,8 @@ export class RedisCommand {
       case "BLPOP":
         this.listCommands.handleBLPop(args, webSocket);
         return;
-      case "TYPE":
-        res = this.handleType(args);
-        break;
 
+      // the stream commands
       case "XADD":
         res = this.streamCommands.handleXAdd(args);
         break;
@@ -93,11 +95,12 @@ export class RedisCommand {
         res = await this.streamCommands.handleXRead(args);
         break;
 
+      // transaction commands
       case "MULTI":
-        res = this.transactionCommands.handleMulti(args);
+        res = this.transactionCommands.handleMulti(args, webSocket);
         break;
       case "EXEC":
-        res = this.transactionCommands.handleExec(args);
+        res = this.transactionCommands.handleExec(args, webSocket);
         break;
 
       default:
@@ -135,5 +138,14 @@ export class RedisCommand {
       return encodeSimpleString("list");
     }
     return encodeSimpleString("string");
+  }
+
+  private shouldQueue(command: string, webSocket: net.Socket): boolean {
+    const controlCommands = ["MULTI", "EXEC", "DISCARD"];
+
+    return (
+      this.transactionCommands.isInTransaction(webSocket) &&
+      !controlCommands.includes(command.toUpperCase())
+    );
   }
 }

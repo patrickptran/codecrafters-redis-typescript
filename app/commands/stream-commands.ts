@@ -1,4 +1,4 @@
-import type { MapEntry, StreamEntry } from "../command";
+import type { MapEntry, StreamEntry } from "../types";
 import {
   encodeArray,
   encodeError,

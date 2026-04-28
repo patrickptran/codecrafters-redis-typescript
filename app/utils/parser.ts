@@ -1,9 +1,5 @@
 export type RESPvalue = string | number | RESPvalue[] | null;
-
-export interface ParsedCommand {
-  cmd: string;
-  args: string[];
-}
+import type { ParsedCommand } from "../types";
 
 const asciiCodes = {
   $: 0x24,
