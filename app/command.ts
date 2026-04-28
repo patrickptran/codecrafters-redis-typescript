@@ -111,6 +111,11 @@ export class RedisCommand {
         res = this.handleDiscard(args, webSocket);
         break;
 
+      // Optimistic Locking
+      case "WATCH":
+        res = this.handleWatch(args);
+        break;
+
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
@@ -165,6 +170,15 @@ export class RedisCommand {
     return encodeSimpleString("OK");
   }
 
+  private handleWatch(args: string[]): string {
+    if (args.length === 0) {
+      return encodeError("ERR wrong number of arguments for 'WATCH' command");
+    }
+
+    // For this stage, just accept the command and respond with OK
+    return encodeSimpleString("OK");
+  }
+
   private executeCommand(cmd: string, args: string[]): string {
     let res: string;
 
@@ -216,7 +230,7 @@ export class RedisCommand {
   }
 
   private shouldQueue(command: string, webSocket: net.Socket): boolean {
-    const controlCommands = ["MULTI", "EXEC", "DISCARD"];
+    const controlCommands = ["MULTI", "EXEC", "DISCARD", "WATCH"];
 
     return (
       this.transactionCommands.isInTransaction(webSocket) &&
