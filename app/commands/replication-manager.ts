@@ -34,6 +34,8 @@ export class ReplicationManager {
 
       await this.sendReplConfCommands();
 
+      await this.sendPsyncCommand();
+
       console.log("Replication handshake completed successfully");
     } catch (e) {
       console.error("Replication handshake failed: ", e);
@@ -140,6 +142,7 @@ export class ReplicationManager {
       }, 3000);
     });
   }
+
   private async sendPingToMaster(): Promise<void> {
     console.log("Send PING to Master");
     const res = await this.sendCommandToMaster("PING", []);
@@ -187,6 +190,18 @@ export class ReplicationManager {
     }
 
     console.log("REPLCONF commands sent successfully");
+  }
+
+  private async sendPsyncCommand(): Promise<void> {
+    if (!this.masterConnection) {
+      throw new Error("No connection to master");
+    }
+
+    console.log("Sending PSYNC command to master");
+
+    const res = await this.sendCommandToMaster("PSYNC", ["?", "-1"]);
+
+    console.log("PSYNC command sent successfully");
   }
 
   private cleanup(): void {

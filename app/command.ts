@@ -143,6 +143,10 @@ export class RedisCommand {
         res = this.handleReplConf(args);
         break;
 
+      case "PSYNC":
+        res = this.handlePsync(args);
+        break;
+
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
@@ -257,6 +261,26 @@ export class RedisCommand {
     }
 
     return encodeSimpleString("OK");
+  }
+  private handlePsync(args: string): string {
+    if (args.length !== 2) {
+      return encodeError("ERR wrong number og arguments for 'PSYNC' command");
+    }
+
+    const replicaId = args[0],
+      offset = args[1];
+
+    if (replicaId === "?" && offset === "-1") {
+      const replicaInfo = this.replicationManager.getReplicaionInfo();
+      const masterId = replicaInfo.master_replid || "unknown";
+      const masterReplOffset = replicaInfo.master_repl_offset || 0;
+
+      return encodeSimpleString(
+        `FULLRESYNC ${masterId} ${masterReplOffset}\r\n`,
+      );
+    }
+
+    return encodeError("ERR PSYNC not fully implemented");
   }
 
   private buildReplicaionInfo(): string {
