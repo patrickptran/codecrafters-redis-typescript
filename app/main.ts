@@ -2,6 +2,13 @@ import * as net from "net";
 import { parsedCommand, encodeError } from "./utils/parser";
 import { RedisCommand } from "./command";
 
+let port = 6379;
+const portIndex = process.argv.indexOf("--port");
+
+if (portIndex !== -1 && process.argv.length > portIndex + 1) {
+  port = parseInt(process.argv[portIndex + 1]);
+}
+
 const redisCmd = new RedisCommand();
 export const server = net.createServer((connection: net.Socket) => {
   // console.log("Client connected");
@@ -22,6 +29,6 @@ export const server = net.createServer((connection: net.Socket) => {
     }
   });
 });
-server.listen(6379, "127.0.0.1", () => {
-  console.log("Redis server listening on 127.0.0.1:6379");
+server.listen(port, "127.0.0.1", () => {
+  console.log(`Redis server listening on 127.0.0.1: ${port}`);
 });

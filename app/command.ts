@@ -133,6 +133,10 @@ export class RedisCommand {
         res = this.handleUnWatch(args, webSocket);
         break;
 
+      case "INFO":
+        res = this.handleInfo(args);
+        break;
+
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
@@ -206,6 +210,16 @@ export class RedisCommand {
     // UNWATCH takes no arguments and clears all watched keys and dirty state
     this.watchCommands.clearWatchState(webSocket);
     return encodeSimpleString("OK");
+  }
+
+  private handleInfo(args: string[]): string {
+    const isReplica =
+      args.length === 1 && args[0].toLowerCase() === "replication";
+
+    if (isReplica) {
+      return encodeBulkString("role:master");
+    }
+    return encodeBulkString("");
   }
 
   private executeCommand(
