@@ -129,6 +129,9 @@ export class RedisCommand {
       case "WATCH":
         res = this.handleWatch(args, webSocket);
         break;
+      case "UNWATCH":
+        res = this.handleUnWatch(args, webSocket);
+        break;
 
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
@@ -199,6 +202,12 @@ export class RedisCommand {
     return encodeSimpleString("OK");
   }
 
+  private handleUnWatch(args: string[], webSocket: net.Socket): string {
+    // UNWATCH takes no arguments and clears all watched keys and dirty state
+    this.watchCommands.clearWatchState(webSocket);
+    return encodeSimpleString("OK");
+  }
+
   private executeCommand(
     cmd: string,
     args: string[],
@@ -260,7 +269,7 @@ export class RedisCommand {
   }
 
   private shouldQueue(command: string, webSocket: net.Socket): boolean {
-    const controlCommands = ["MULTI", "EXEC", "DISCARD", "WATCH"];
+    const controlCommands = ["MULTI", "EXEC", "DISCARD", "WATCH", "UNWATCH"];
 
     return (
       this.transactionCommands.isInTransaction(webSocket) &&
