@@ -38,8 +38,8 @@ export class RedisCommand {
     cmd: string,
     args: string[],
     webSocket: net.Socket,
-  ): Promise<void> {
-    let res: string;
+  ): Promise<any> {
+    let res: string | undefined;
 
     if (this.shouldQueue(cmd, webSocket)) {
       res = this.transactionCommands.enqueueCommand(cmd, args, webSocket);
@@ -144,14 +144,28 @@ export class RedisCommand {
         break;
 
       case "PSYNC":
-        res = this.handlePsync(args);
+        res = this.handlePsync(args, webSocket);
         break;
 
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
     }
 
-    webSocket.write(res);
+    // here we try to write commands to replicas (only if this is the master and not during any transaction execution)
+    if (
+      res &&
+      !this.transactionCommands.isInTransaction(webSocket) &&
+      this.isWriteCommand(cmd) &&
+      !res.startsWith("-") &&
+      !this.replicationManager.isReplica()
+    ) {
+      this.replicationManager.propagateCommand(cmd, args);
+    }
+
+    if (this.replicationManager.isReplica()) return undefined;
+
+    webSocket.write(String(res));
+    return res;
   }
 
   private handlePing(): string {
@@ -262,7 +276,7 @@ export class RedisCommand {
 
     return encodeSimpleString("OK");
   }
-  private handlePsync(args: string): string {
+  private handlePsync(args: string[], socket?: net.Socket): string | undefined {
     if (args.length !== 2) {
       return encodeError("ERR wrong number og arguments for 'PSYNC' command");
     }
@@ -275,12 +289,36 @@ export class RedisCommand {
       const masterId = replicaInfo.master_replid || "unknown";
       const masterReplOffset = replicaInfo.master_repl_offset || 0;
 
-      return encodeSimpleString(
-        `FULLRESYNC ${masterId} ${masterReplOffset}\r\n`,
+      const fullresyncRes = encodeSimpleString(
+        `FULLRESYNC ${masterId} ${masterReplOffset}`,
       );
+
+      if (socket) {
+        socket.write(fullresyncRes);
+
+        this.sendEmptyRDBFile(socket);
+
+        // save this connection as a replica
+        this.replicationManager.addReplicaConnection(socket);
+
+        return undefined;
+      }
+
+      return fullresyncRes;
     }
 
     return encodeError("ERR PSYNC not fully implemented");
+  }
+
+  private sendEmptyRDBFile(socket: net.Socket): void {
+    const emptyRDBFile =
+      "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2";
+
+    const rdbData = Buffer.from(emptyRDBFile, "hex");
+    const rdbRes = `$${rdbData.length}\r\n`;
+
+    socket.write(rdbRes);
+    socket.write(rdbData);
   }
 
   private buildReplicaionInfo(): string {
@@ -370,5 +408,39 @@ export class RedisCommand {
       this.transactionCommands.isInTransaction(webSocket) &&
       !controlCommands.includes(command.toUpperCase())
     );
+  }
+
+  // =================== REPLICATION HELPER FUNCTIONS =====================
+  private isWriteCommand(command: string): boolean {
+    const writeCommands = [
+      "SET",
+      "DEL",
+      "INCR",
+      "DECR",
+      "INCRBY",
+      "DECRBY",
+      "RPUSH",
+      "LPUSH",
+      "LPOP",
+      "RPOP",
+      "LREM",
+      "LSET",
+      "LTRIM",
+      "XADD",
+      "XDEL",
+      "XTRIM",
+      "HSET",
+      "HDEL",
+      "HINCRBY",
+      "HINCRBYFLOAT",
+      "SADD",
+      "SREM",
+      "SPOP",
+      "SMOVE",
+      "ZADD",
+      "ZREM",
+      "ZINCRBY",
+    ];
+    return writeCommands.includes(command.toUpperCase());
   }
 }

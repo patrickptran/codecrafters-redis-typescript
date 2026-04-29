@@ -5,10 +5,12 @@ import { encodeRESPCommand } from "../utils/parser";
 export class ReplicationManager {
   private config: ServerConfig;
   private masterConnection: net.Socket | null;
+  private replicaConnections: Set<net.Socket>;
 
   constructor(config: ServerConfig) {
     this.config = config;
     this.masterConnection = null;
+    this.replicaConnections = new Set();
   }
 
   public async initiateHandShake(): Promise<void> {
@@ -78,8 +80,14 @@ export class ReplicationManager {
     return "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
   }
 
-  private getConnectedSlaves(): any[] {
-    return [];
+  private getConnectedSlaves(): net.Socket[] {
+    return Array.from(this.replicaConnections);
+  }
+
+  private removeReplicaConnection(socket: net.Socket): void {
+    if (this.replicaConnections.has(socket)) {
+      this.replicaConnections.delete(socket);
+    }
   }
 
   private async connectToMaster(
@@ -224,5 +232,42 @@ export class ReplicationManager {
     }
 
     this.config.capabilities.push(...capability);
+  }
+
+  public addReplicaConnection(socket: net.Socket): void {
+    if (this.replicaConnections.has(socket)) {
+      return;
+    }
+
+    this.replicaConnections.add(socket);
+
+    socket.on("close", () => {
+      this.replicaConnections.delete(socket);
+    });
+    socket.on("error", () => {
+      this.replicaConnections.delete(socket);
+    });
+  }
+
+  public propagateCommand(command: string, args: string[]): void {
+    if (this.replicaConnections.size === 0) {
+      return;
+    }
+
+    const respCommand = encodeRESPCommand(command, args);
+
+    for (const replica of this.replicaConnections) {
+      try {
+        replica.write(respCommand);
+      } catch (error) {
+        console.log(
+          `Failed to propafate command to replica ${replica} : error ${error}`,
+        );
+      }
+    }
+  }
+
+  public getReplicaCount(): number {
+    return this.replicaConnections.size;
   }
 }
