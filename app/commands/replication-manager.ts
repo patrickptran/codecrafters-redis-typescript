@@ -32,7 +32,9 @@ export class ReplicationManager {
 
       await this.sendPingToMaster();
 
-      console.log("Replication handsahke completed successfully");
+      await this.sendReplConfCommands();
+
+      console.log("Replication handshake completed successfully");
     } catch (e) {
       console.error("Replication handshake failed: ", e);
       this.cleanup();
@@ -140,7 +142,6 @@ export class ReplicationManager {
   }
   private async sendPingToMaster(): Promise<void> {
     console.log("Send PING to Master");
-
     const res = await this.sendCommandToMaster("PING", []);
 
     if (res !== "+PONG\r\n") {
@@ -150,10 +151,63 @@ export class ReplicationManager {
     console.log("PING handshake successfully");
   }
 
+  private async sendReplConfCommands(): Promise<void> {
+    if (!this.masterConnection) {
+      throw new Error("No connection to master");
+    }
+
+    console.log("Sending REPLCONF command to master");
+
+    const currentPort = this.config.port || 6379;
+
+    console.log(`Sending REPLCONF listening-port ${currentPort}`);
+
+    const portRes = await this.sendCommandToMaster("REPLCONF", [
+      "listening-port",
+      currentPort.toString(),
+    ]);
+
+    if (portRes !== "+OK\r\n") {
+      throw new Error(
+        `Unexpected REPLCONF listening-port response: ${portRes}`,
+      );
+    }
+
+    // send capabilities
+    console.log("Sending REPLCONF capa psync2");
+    const capaRes = await this.sendCommandToMaster("REPLCONF", [
+      "capa",
+      "psync2",
+    ]);
+
+    if (capaRes !== "+OK\r\n") {
+      throw new Error(
+        `Unexpected REPLCONF listening-port response: ${portRes}`,
+      );
+    }
+
+    console.log("REPLCONF commands sent successfully");
+  }
+
   private cleanup(): void {
     if (this.masterConnection) {
       this.masterConnection.destroy();
       this.masterConnection = null;
     }
+  }
+
+  public setListeningPort(port: number): void {
+    this.config.port = port;
+  }
+
+  public setIpAddress(ip: string): void {
+    this.config.ipAddress = ip;
+  }
+  public addCapabilities(capability: string[]): void {
+    if (!this.config.capabilities) {
+      this.config.capabilities = [];
+    }
+
+    this.config.capabilities.push(...capability);
   }
 }

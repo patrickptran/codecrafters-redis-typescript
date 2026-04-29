@@ -23,6 +23,11 @@ export interface QueuedCommand {
 
 export interface ServerConfig {
   role: ServerRole;
+
+  port?: number;
+  ipAddress?: string;
+  capabilities?: string[];
+
   masterHost?: string;
   masterPort?: number;
 

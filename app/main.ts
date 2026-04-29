@@ -37,7 +37,10 @@ const parseServerArgs = (): { port: number; config: ServerConfig } => {
 
   return {
     port,
-    config: createServerConfig(configOverride),
+    config: createServerConfig({
+      ...configOverride,
+      port: port,
+    }),
   };
 };
 

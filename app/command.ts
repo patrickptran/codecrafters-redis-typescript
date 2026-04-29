@@ -139,6 +139,9 @@ export class RedisCommand {
       case "INFO":
         res = this.handleInfo(args);
         break;
+      case "REPLCONF":
+        res = this.handleReplConf(args);
+        break;
 
       default:
         res = encodeError(`ERR unknow command ${cmd}`);
@@ -223,6 +226,37 @@ export class RedisCommand {
       return this.buildReplicaionInfo();
     }
     return encodeBulkString("");
+  }
+
+  private handleReplConf(args: string[]): string {
+    if (args.length < 2 || args.length % 2 !== 0) {
+      return encodeError(
+        "ERR wrong number og arguments for 'REPLCONF' command",
+      );
+    }
+
+    for (let i = 0; i < args.length; i += 2) {
+      const option = args[i].toLowerCase();
+      const value = args[i + 1];
+
+      if (option === "listening-port") {
+        const port = parseInt(value, 10);
+
+        if (isNaN(port) || port <= 0 || port > 65635) {
+          return encodeError("ERR invalid port number");
+        }
+
+        this.replicationManager.setListeningPort(port);
+      } else if (option === "ip-address") {
+        this.replicationManager.setIpAddress(value);
+      } else if (option === "capa") {
+        this.replicationManager.addCapabilities(value.split(" "));
+      } else {
+        return encodeError(`ERR unknown REPLCONF option: ${option} `);
+      }
+    }
+
+    return encodeSimpleString("OK");
   }
 
   private buildReplicaionInfo(): string {
