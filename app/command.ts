@@ -237,10 +237,12 @@ export class RedisCommand {
 
     if (this.config.role === "master") {
       fields.connected_slaves = this.getConnectedSlaves().length;
+      fields.master_replid = this.generateReplicationId();
+      fields.master_repli_offset = 0;
     }
 
     if (this.config.replicationOffset !== undefined) {
-      fields.master_replica_offset = this.config.replicationOffset;
+      fields.master_repl_offset = this.config.replicationOffset;
     }
 
     const info = Object.entries(fields)
@@ -248,6 +250,10 @@ export class RedisCommand {
       .join("\r\n");
 
     return encodeBulkString(info);
+  }
+
+  private generateReplicationId(): string {
+    return "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
   }
 
   private getConnectedSlaves(): any[] {
