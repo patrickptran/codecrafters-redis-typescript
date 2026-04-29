@@ -226,3 +226,14 @@ export const encodeXReadArray = (
 
   return res;
 };
+
+export const encodeRESPCommand = (command: string, args: string[]): string => {
+  const parts = [command, ...args];
+
+  let res = `*${parts.length}\r\n`;
+
+  for (const part of parts) {
+    res += `$${part.length}\r\n${part}\r\n`;
+  }
+  return res;
+};

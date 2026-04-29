@@ -10,9 +10,10 @@ import { ListCommands } from "./commands/list-commands";
 import { StreamCommands } from "./commands/stream-commands";
 import { TransactionsCommands } from "./commands/transaction-commands";
 import { WatchCommands } from "./commands/watch-commands";
+import { ReplicationManager } from "./commands/replication-manager";
+
 import type { MapEntry, ServerConfig } from "./types";
 import { DEFAULT_SERVER_CONFIG } from "./config/server-config";
-import type { StringifyOptions } from "querystring";
 
 export class RedisCommand {
   private mapping: Map<string, MapEntry>;
@@ -21,7 +22,7 @@ export class RedisCommand {
   private streamCommands: StreamCommands;
   private transactionCommands: TransactionsCommands;
   private watchCommands: WatchCommands;
-  private config: ServerConfig;
+  private replicationManager: ReplicationManager;
 
   constructor(config: ServerConfig = DEFAULT_SERVER_CONFIG) {
     this.mapping = new Map<string, MapEntry>();
@@ -29,8 +30,8 @@ export class RedisCommand {
     this.listCommands = new ListCommands(this.mapping);
     this.streamCommands = new StreamCommands(this.mapping);
     this.transactionCommands = new TransactionsCommands(this.mapping);
+    this.replicationManager = new ReplicationManager(config);
     this.watchCommands = new WatchCommands();
-    this.config = config;
   }
 
   async executedCommand(
@@ -132,7 +133,7 @@ export class RedisCommand {
         res = this.handleWatch(args, webSocket);
         break;
       case "UNWATCH":
-        res = this.handleUnWatch(args, webSocket);
+        res = this.handleUnWatch(webSocket);
         break;
 
       case "INFO":
@@ -208,7 +209,7 @@ export class RedisCommand {
     return encodeSimpleString("OK");
   }
 
-  private handleUnWatch(args: string[], webSocket: net.Socket): string {
+  private handleUnWatch(webSocket: net.Socket): string {
     // UNWATCH takes no arguments and clears all watched keys and dirty state
     this.watchCommands.clearWatchState(webSocket);
     return encodeSimpleString("OK");
@@ -219,31 +220,14 @@ export class RedisCommand {
       args.length === 1 && args[0].toLowerCase() === "replication";
 
     if (isReplica) {
-      // return encodeBulkString("role:master");
       return this.buildReplicaionInfo();
     }
     return encodeBulkString("");
   }
 
   private buildReplicaionInfo(): string {
-    const fields: Record<string, any> = {
-      role: this.config.role,
-    };
-
-    if (this.config.role === "slave") {
-      if (this.config.masterHost) fields.master_host = this.config.masterHost;
-      if (this.config.masterPort) fields.master_port = this.config.masterPort;
-    }
-
-    if (this.config.role === "master") {
-      fields.connected_slaves = this.getConnectedSlaves().length;
-      fields.master_replid = this.generateReplicationId();
-      fields.master_repli_offset = 0;
-    }
-
-    if (this.config.replicationOffset !== undefined) {
-      fields.master_repl_offset = this.config.replicationOffset;
-    }
+    const fields: Record<string, any> =
+      this.replicationManager.getReplicaionInfo();
 
     const info = Object.entries(fields)
       .map(([key, value]) => `${key}:${value}`)
@@ -252,12 +236,13 @@ export class RedisCommand {
     return encodeBulkString(info);
   }
 
-  private generateReplicationId(): string {
-    return "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb";
+  // ========================== REPLICATION HANDSHAKE =============================
+  public async initiateReplicationHandshake(): Promise<void> {
+    return this.replicationManager.initiateHandShake();
   }
 
-  private getConnectedSlaves(): any[] {
-    return [];
+  public getReplicationManager(): ReplicationManager {
+    return this.replicationManager;
   }
 
   private executeCommand(
