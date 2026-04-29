@@ -3,8 +3,6 @@ import {
   encodeSimpleString,
   encodeError,
   encodeBulkString,
-  encodeInteger,
-  encodeArray,
 } from "./utils/parser";
 
 import { StringCommands } from "./commands/string-commands";
@@ -12,7 +10,9 @@ import { ListCommands } from "./commands/list-commands";
 import { StreamCommands } from "./commands/stream-commands";
 import { TransactionsCommands } from "./commands/transaction-commands";
 import { WatchCommands } from "./commands/watch-commands";
-import type { MapEntry } from "./types";
+import type { MapEntry, ServerConfig } from "./types";
+import { DEFAULT_SERVER_CONFIG } from "./config/server-config";
+import type { StringifyOptions } from "querystring";
 
 export class RedisCommand {
   private mapping: Map<string, MapEntry>;
@@ -21,14 +21,16 @@ export class RedisCommand {
   private streamCommands: StreamCommands;
   private transactionCommands: TransactionsCommands;
   private watchCommands: WatchCommands;
+  private config: ServerConfig;
 
-  constructor() {
+  constructor(config: ServerConfig = DEFAULT_SERVER_CONFIG) {
     this.mapping = new Map<string, MapEntry>();
     this.stringCommands = new StringCommands(this.mapping);
     this.listCommands = new ListCommands(this.mapping);
     this.streamCommands = new StreamCommands(this.mapping);
     this.transactionCommands = new TransactionsCommands(this.mapping);
     this.watchCommands = new WatchCommands();
+    this.config = config;
   }
 
   async executedCommand(
@@ -217,9 +219,39 @@ export class RedisCommand {
       args.length === 1 && args[0].toLowerCase() === "replication";
 
     if (isReplica) {
-      return encodeBulkString("role:master");
+      // return encodeBulkString("role:master");
+      return this.buildReplicaionInfo();
     }
     return encodeBulkString("");
+  }
+
+  private buildReplicaionInfo(): string {
+    const fields: Record<string, any> = {
+      role: this.config.role,
+    };
+
+    if (this.config.role === "slave") {
+      if (this.config.masterHost) fields.master_host = this.config.masterHost;
+      if (this.config.masterPort) fields.master_port = this.config.masterPort;
+    }
+
+    if (this.config.role === "master") {
+      fields.connected_slaves = this.getConnectedSlaves().length;
+    }
+
+    if (this.config.replicationOffset !== undefined) {
+      fields.master_replica_offset = this.config.replicationOffset;
+    }
+
+    const info = Object.entries(fields)
+      .map(([key, value]) => `${key}:${value}`)
+      .join("\r\n");
+
+    return encodeBulkString(info);
+  }
+
+  private getConnectedSlaves(): any[] {
+    return [];
   }
 
   private executeCommand(
