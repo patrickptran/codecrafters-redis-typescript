@@ -53,7 +53,15 @@ export class ReplicationManager {
     return this.masterConnection;
   }
 
-  public getReplicaionInfo(): Record<string, any> {
+  public getMasterHost(): string | undefined {
+    return this.config.masterHost;
+  }
+
+  public getMasterPort(): number | undefined {
+    return this.config.masterPort;
+  }
+
+  public getReplicationInfo(): Record<string, any> {
     const fields: Record<string, any> = {
       role: this.config.role,
     };

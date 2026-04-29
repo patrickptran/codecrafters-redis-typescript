@@ -162,10 +162,13 @@ export class RedisCommand {
       this.replicationManager.propagateCommand(cmd, args);
     }
 
-    if (this.replicationManager.isReplica()) return undefined;
+    if (this.replicationManager.isReplica() && cmd.toUpperCase() === "PSYNC") {
+      return;
+    }
 
-    webSocket.write(String(res));
-    return res;
+    if (res !== undefined) {
+      webSocket.write(res);
+    }
   }
 
   private handlePing(): string {
@@ -237,12 +240,13 @@ export class RedisCommand {
   }
 
   private handleInfo(args: string[]): string {
-    const isReplica =
-      args.length === 1 && args[0].toLowerCase() === "replication";
+    const section = args.length > 0 ? args[0].toLowerCase() : "";
 
-    if (isReplica) {
-      return this.buildReplicaionInfo();
+    // For now, we only care about "replication" section (what the test asks)
+    if (section === "replication") {
+      return this.buildReplicationInfo();
     }
+    // Default: return empty for other sections
     return encodeBulkString("");
   }
 
@@ -285,7 +289,7 @@ export class RedisCommand {
       offset = args[1];
 
     if (replicaId === "?" && offset === "-1") {
-      const replicaInfo = this.replicationManager.getReplicaionInfo();
+      const replicaInfo = this.replicationManager.getReplicationInfo();
       const masterId = replicaInfo.master_replid || "unknown";
       const masterReplOffset = replicaInfo.master_repl_offset || 0;
 
@@ -321,9 +325,9 @@ export class RedisCommand {
     socket.write(rdbData);
   }
 
-  private buildReplicaionInfo(): string {
+  private buildReplicationInfo(): string {
     const fields: Record<string, any> =
-      this.replicationManager.getReplicaionInfo();
+      this.replicationManager.getReplicationInfo();
 
     const info = Object.entries(fields)
       .map(([key, value]) => `${key}:${value}`)
