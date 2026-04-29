@@ -5,6 +5,7 @@ import {
   encodeError,
   encodeRawArray,
 } from "../utils/parser";
+import { WatchCommands } from "./watch-commands";
 
 export class TransactionsCommands {
   private mapping: Map<string, MapEntry>;
@@ -43,6 +44,7 @@ export class TransactionsCommands {
     args: string[],
     webSocket: net.Socket,
     executor: (cmd: string, cmdArgs: string[]) => string,
+    watchCommands: WatchCommands,
   ): string {
     if (args.length !== 0) {
       return encodeError("ERR wrong number of arguments for EXEC command");
@@ -61,10 +63,20 @@ export class TransactionsCommands {
     // clear transaction for this connection
     this.clearQueue(connectionId);
 
+    // Check if any watched keys were modified
+    if (watchCommands.isConnectionDirty(webSocket)) {
+      // Transaction aborted, return null array
+      watchCommands.clearWatchState(webSocket);
+      return encodeRawArray(null);
+    }
+
     // Execute all queued commands and collect results
     const results: string[] = queuedCommands.map((queued) =>
       executor(queued.command, queued.args),
     );
+
+    // Clear watch state after successful execution
+    watchCommands.clearWatchState(webSocket);
 
     return encodeRawArray(results);
   }

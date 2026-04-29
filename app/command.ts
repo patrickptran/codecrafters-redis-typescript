@@ -11,6 +11,7 @@ import { StringCommands } from "./commands/string-commands";
 import { ListCommands } from "./commands/list-commands";
 import { StreamCommands } from "./commands/stream-commands";
 import { TransactionsCommands } from "./commands/transaction-commands";
+import { WatchCommands } from "./commands/watch-commands";
 import type { MapEntry } from "./types";
 
 export class RedisCommand {
@@ -19,6 +20,7 @@ export class RedisCommand {
   private listCommands: ListCommands;
   private streamCommands: StreamCommands;
   private transactionCommands: TransactionsCommands;
+  private watchCommands: WatchCommands;
 
   constructor() {
     this.mapping = new Map<string, MapEntry>();
@@ -26,6 +28,7 @@ export class RedisCommand {
     this.listCommands = new ListCommands(this.mapping);
     this.streamCommands = new StreamCommands(this.mapping);
     this.transactionCommands = new TransactionsCommands(this.mapping);
+    this.watchCommands = new WatchCommands();
   }
 
   async executedCommand(
@@ -56,37 +59,47 @@ export class RedisCommand {
       // the string commands
       case "SET":
         res = this.stringCommands.handleSet(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "GET":
         res = this.stringCommands.handleGet(args);
         break;
       case "INCR":
         res = this.stringCommands.handleIncr(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
 
       // the list commands
       case "RPUSH":
         res = this.listCommands.handleRpush(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
+        // this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "LRANGE":
         res = this.listCommands.handleLRange(args);
         break;
       case "LPUSH":
         res = this.listCommands.handleLPush(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "LLEN":
         res = this.listCommands.handleLLen(args);
         break;
       case "LPOP":
         res = this.listCommands.handleLPop(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "BLPOP":
         this.listCommands.handleBLPop(args, webSocket);
+        if (args.length > 0) {
+          this.watchCommands.markKeyAsModified(args[0], webSocket);
+        }
         return;
 
       // the stream commands
       case "XADD":
         res = this.streamCommands.handleXAdd(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "XRANGE":
         res = this.streamCommands.handleXRange(args);
@@ -104,7 +117,8 @@ export class RedisCommand {
           args,
           webSocket,
           (command: string, cmdArgs: string[]) =>
-            this.executeCommand(command, cmdArgs),
+            this.executeCommand(command, cmdArgs, webSocket),
+          this.watchCommands,
         );
         break;
       case "DISCARD":
@@ -167,6 +181,7 @@ export class RedisCommand {
     }
 
     this.transactionCommands.clearQueue(connectionId);
+    this.watchCommands.clearWatchState(webSocket);
     return encodeSimpleString("OK");
   }
 
@@ -179,11 +194,16 @@ export class RedisCommand {
       return encodeError("ERR WATCH inside MULTI is not allowed");
     }
 
-    // For this stage, just accept the command and respond with OK
+    // Add keys to watch list
+    this.watchCommands.watchKeys(args, webSocket);
     return encodeSimpleString("OK");
   }
 
-  private executeCommand(cmd: string, args: string[]): string {
+  private executeCommand(
+    cmd: string,
+    args: string[],
+    webSocket: net.Socket,
+  ): string {
     let res: string;
 
     switch (cmd.toUpperCase()) {
@@ -198,30 +218,36 @@ export class RedisCommand {
         break;
       case "SET":
         res = this.stringCommands.handleSet(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "GET":
         res = this.stringCommands.handleGet(args);
         break;
       case "INCR":
         res = this.stringCommands.handleIncr(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "RPUSH":
         res = this.listCommands.handleRpush(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "LRANGE":
         res = this.listCommands.handleLRange(args);
         break;
       case "LPUSH":
         res = this.listCommands.handleLPush(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "LLEN":
         res = this.listCommands.handleLLen(args);
         break;
       case "LPOP":
         res = this.listCommands.handleLPop(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "XADD":
         res = this.streamCommands.handleXAdd(args);
+        this.watchCommands.markKeyAsModified(args[0], webSocket);
         break;
       case "XRANGE":
         res = this.streamCommands.handleXRange(args);
